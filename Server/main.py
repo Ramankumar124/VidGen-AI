@@ -1,3 +1,14 @@
+import os
+from google import genai
+
+# Load API key from environment variable
+api_key = os.getenv("GEMINI_API_KEY")
+if not api_key:
+    raise ValueError("GEMINI_API_KEY environment variable not set")
+
+client = genai.Client(api_key=api_key)
+
+
 from langchain_core.runnables import RunnableLambda
 from langchain_google_genai import ChatGoogleGenerativeAI
 import subprocess
@@ -23,7 +34,7 @@ app.add_middleware(
 )
 
 
-client = genai.Client()
+client = genai.Client(api_key=api_key)
 
 
 SYSTEM_PROMPT = """
