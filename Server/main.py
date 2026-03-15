@@ -22,9 +22,7 @@ app.add_middleware(
     allow_headers=["*"],  # Allows all headers
 )
 
-import os
-os.environ["GOOGLE_API_KEY"] = "AIzaSyBbRek5EMgTbhVyNe72C4Pv0t0WcXP2A8U"
-# os.environ["GOOGLE_API_KEY"] = "AIzaSyD1UDLSELjiCuFpHRoOxVRGjOmXEXCzPPk"
+
 client = genai.Client()
 
 
