@@ -14,4 +14,10 @@ dependencies = [
     "python-multipart>=0.0.22",
     "uvicorn>=0.41.0",
     "yt-dlp>=2026.3.13",
+    "python-dotenv>=1.0.0",
+    "langchain-openai>=1.1.11",
+    "pydantic>=2.12.5",
+    "pillow>=12.1.1",
+    "dotenv>=0.9.9",
+    "fal-client>=0.13.2",
 ]
