@@ -3,7 +3,7 @@ import json
 import time
 from dotenv import load_dotenv
 from google import genai
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile, File, Form, Body, Request, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from langchain_core.runnables import RunnableLambda
@@ -208,6 +208,33 @@ async def generate_our_script(
 async def health_check():
     """Health check endpoint."""
     return {"status": "ok"}
+
+@app.post("/callback")
+async def webhook_callback(request: Request, x_signature: Optional[str] = Header(None)):
+    """Generic webhook callback endpoint.
+
+    - Accepts JSON or raw bodies from external webhook providers.
+    - Logs the payload and optional `X-Signature` header.
+    - Returns a simple acknowledgment so the provider knows the callback was received.
+    """
+    try:
+        payload = await request.json()
+    except Exception:
+        raw = await request.body()
+        try:
+            payload = raw.decode("utf-8")
+        except Exception:
+            payload = str(raw)
+
+    print("Received webhook callback. X-Signature:", x_signature)
+    try:
+        print(json.dumps(payload))
+    except Exception:
+        print(payload)
+
+    # TODO: validate signature, persist events, or enqueue for processing
+    return {"status": "received"}
+
 
 
 if __name__ == "__main__":
