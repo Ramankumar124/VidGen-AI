@@ -5,72 +5,22 @@ const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
 /**
  * Submit a batch of video URLs and stream the results back.
- * The backend streams newline-delimited JSON (NDJSON).
- * 
- * @param {string[]} videoUrls - Array of video URLs
- * @param {function(Object): void} onChunk - Callback fired for each result chunk
- * @returns {Promise<void>} Resolves when the stream is fully consumed
  */
 export async function streamVideos(videoUrls, onChunk) {
     const res = await fetch(`${BASE_URL}/process-videos`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(videoUrls),
     })
-
     if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: res.statusText }))
         throw new Error(err.detail ?? 'Failed to connect to streaming endpoint')
     }
-
-    // Read the stream
-    const reader = res.body.getReader()
-    const decoder = new TextDecoder('utf-8')
-    let buffer = ''
-
-    try {
-        while (true) {
-            const { done, value } = await reader.read()
-            if (done) break
-
-            buffer += decoder.decode(value, { stream: true })
-
-            // Process complete lines (NDJSON format)
-            const lines = buffer.split('\n')
-
-            // Keep the last incomplete line in the buffer
-            buffer = lines.pop() ?? ''
-
-            for (const line of lines) {
-                if (!line.trim()) continue
-                try {
-                    const chunk = JSON.parse(line)
-                    onChunk(chunk)
-                } catch (err) {
-                    console.error('Failed to parse NDJSON chunk:', err, line)
-                }
-            }
-        }
-
-        // Process any remaining content in buffer (if no trailing newline)
-        if (buffer.trim()) {
-            try {
-                const chunk = JSON.parse(buffer)
-                onChunk(chunk)
-            } catch (err) {
-                console.error('Failed to parse final NDJSON chunk:', err)
-            }
-        }
-    } finally {
-        reader.releaseLock()
-    }
+    await _readNDJSON(res, onChunk)
 }
 
 /**
  * Check server health.
- * @returns {Promise<{ status: string }>}
  */
 export async function checkHealth() {
     const res = await fetch(`${BASE_URL}/health`)
@@ -79,38 +29,17 @@ export async function checkHealth() {
 }
 
 /**
- * Generate a custom advertisement script based on product details
- * and example scripts from video analysis. Streams results via NDJSON.
- * 
- * @param {Object} payload - The request payload
- * @param {string[]} payload.example_script - Selected example scripts/summaries
- * @param {string} payload.price_range - Product price range
- * @param {string} payload.category - Product category
- * @param {string} payload.product_type - Type of product
- * @param {string} payload.styling_type - Styling preference
- * @param {string} payload.target_age_range - Target age range
- * @param {string} payload.target_gender - Target gender
- * @param {string} payload.target_behavior - Target behavior/interests
- * @param {string} payload.ideal_selling_location - Where to sell
- * @param {string} payload.short_reasoning - Brief reasoning
- * @param {File[]} payload.images - Product images
- * @param {function(Object): void} onChunk - Callback fired for each generated script
- * @returns {Promise<void>} Resolves when the stream is fully consumed
+ * Generate a custom advertisement script via NDJSON stream.
  */
 export async function generateOwnScript(payload, onChunk) {
     const formData = new FormData()
 
-    // Add example scripts as multiple form fields with the same key
-    // Backend expects List[str] in FastAPI Form()
     if (payload.example_script && Array.isArray(payload.example_script)) {
         payload.example_script.forEach((script) => {
-            if (script) {
-                formData.append('example_scripts', script)
-            }
+            if (script) formData.append('example_scripts', script)
         })
     }
 
-    // Add other form fields
     formData.append('brand_name', payload.brand_name || '')
     formData.append('product_name', payload.product_name || '')
     formData.append('price_range', payload.price_range || '')
@@ -123,12 +52,9 @@ export async function generateOwnScript(payload, onChunk) {
     formData.append('ideal_selling_location', payload.ideal_selling_location || '')
     formData.append('short_reasoning', payload.short_reasoning || '')
 
-    // Add product images with correct field name 'product_images'
     if (payload.images && Array.isArray(payload.images)) {
         payload.images.forEach((image) => {
-            if (image.file) {
-                formData.append('product_images', image.file)
-            }
+            if (image.file) formData.append('product_images', image.file)
         })
     }
 
@@ -136,13 +62,67 @@ export async function generateOwnScript(payload, onChunk) {
         method: 'POST',
         body: formData,
     })
-
     if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: res.statusText }))
         throw new Error(err.detail ?? 'Failed to generate custom script')
     }
+    await _readNDJSON(res, onChunk)
+}
 
-    // Read the stream (NDJSON format)
+/**
+ * Trigger the full video generation pipeline.
+ * Sends the script JSON + optional product/model images to /generate-video,
+ * waits for the MP4 response, and triggers a browser download.
+ *
+ * @param {Object}   scriptData     - The GeneratedScript object
+ * @param {File[]}   productImages  - Product reference images (optional)
+ * @param {File[]}   modelImages    - Model reference photos (optional)
+ * @param {function} onStatus       - Called with progress strings
+ */
+export async function generateVideo(
+    scriptData,
+    productImages = [],
+    modelImages = [],
+    onStatus = () => { },
+    options = {},
+) {
+    onStatus('Uploading script and images…')
+
+    const formData = new FormData()
+    formData.append('script_json', JSON.stringify(scriptData))
+
+    productImages.forEach((img) => formData.append('product_images', img))
+    modelImages.forEach((img) => formData.append('model_images', img))
+
+    onStatus('Running pipeline — this can take several minutes…')
+
+    const res = await fetch(`${BASE_URL}/generate-video`, {
+        method: 'POST',
+        body: formData,
+        signal: options.signal,
+    })
+
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }))
+        throw new Error(err.detail ?? 'Video generation failed')
+    }
+
+    // Download the returned MP4
+    onStatus('Downloading final video…')
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'advertisement_video.mp4'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    onStatus('Done!')
+}
+
+// ─── Internal helper ──────────────────────────────────────────────────────────
+async function _readNDJSON(res, onChunk) {
     const reader = res.body.getReader()
     const decoder = new TextDecoder('utf-8')
     let buffer = ''
@@ -151,34 +131,18 @@ export async function generateOwnScript(payload, onChunk) {
         while (true) {
             const { done, value } = await reader.read()
             if (done) break
-
             buffer += decoder.decode(value, { stream: true })
-
-            // Process complete lines (NDJSON format)
             const lines = buffer.split('\n')
-
-            // Keep the last incomplete line in the buffer
             buffer = lines.pop() ?? ''
-
             for (const line of lines) {
                 if (!line.trim()) continue
-                try {
-                    const chunk = JSON.parse(line)
-                    onChunk(chunk)
-                } catch (err) {
-                    console.error('Failed to parse NDJSON chunk:', err, line)
-                }
+                try { onChunk(JSON.parse(line)) }
+                catch (e) { console.error('NDJSON parse error:', e, line) }
             }
         }
-
-        // Process any remaining content in buffer (if no trailing newline)
         if (buffer.trim()) {
-            try {
-                const chunk = JSON.parse(buffer)
-                onChunk(chunk)
-            } catch (err) {
-                console.error('Failed to parse final NDJSON chunk:', err)
-            }
+            try { onChunk(JSON.parse(buffer)) }
+            catch (e) { console.error('NDJSON final parse error:', e) }
         }
     } finally {
         reader.releaseLock()

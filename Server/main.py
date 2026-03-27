@@ -1,17 +1,23 @@
 import os
 import json
 import time
+import asyncio
 from dotenv import load_dotenv
 from google import genai
 from fastapi import FastAPI, UploadFile, File, Form, Body, Request, Header
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
 from langchain_core.runnables import RunnableLambda
 from typing import List, Optional
 from models.VedioAnalysis import VideoAnalysis
 from models.ScriptGeneration import ScriptResponse, GeneratedScript
 from prompts.prompts import SYSTEM_PROMPT, SCRIPT_GENERATION_SYSTEM_PROMPT
 from utils.DownloadVideo import download_video
+from pipeline.extract_images import run_extract_images
+from pipeline.scene_generation import run_scene_generation
+from pipeline.kling_video import run_kling_video
+from pipeline.merge_video import merge_videos
+from pipeline.run_pipeline import run_full_pipeline
 # Load environment variables from .env file
 load_dotenv()
 
@@ -237,9 +243,91 @@ async def webhook_callback(request: Request, x_signature: Optional[str] = Header
 
 
 
+@app.post("/generate-video")
+async def generate_video(
+    script_json: str = Form(..., description="JSON string of the GeneratedScript"),
+    product_images: Optional[List[UploadFile]] = File(None),
+    model_images: Optional[List[UploadFile]] = File(None),
+):
+    """
+    Full pipeline: script → extract images → scene images → Kling videos → merge → download.
+
+    Accepts:
+        script_json   : JSON string matching GeneratedScript schema
+        product_images: upload product reference images (saved as output/product1.png …)
+        model_images  : upload model reference photos  (saved as output/model1.png …)
+
+    Returns:
+        The final merged MP4 as a file download.
+    """
+    # Parse script
+    try:
+        script_data = json.loads(script_json)
+        generated_script = GeneratedScript(**script_data)
+    except Exception as e:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=422, detail=f"Invalid script_json: {e}")
+
+    scenes = [s.model_dump() for s in generated_script.scenes]
+
+    # Save uploaded reference images to output/
+    os.makedirs("output", exist_ok=True)
+
+    if product_images:
+        for idx, img_file in enumerate(product_images, start=1):
+            img_bytes = await img_file.read()
+            ext = (img_file.filename or "image.png").rsplit(".", 1)[-1].lower()
+            path = os.path.join("output", f"product{idx}.{ext}")
+            with open(path, "wb") as f:
+                f.write(img_bytes)
+            print(f"✅ Saved product image: {path}")
+
+    if model_images:
+        for idx, img_file in enumerate(model_images, start=1):
+            img_bytes = await img_file.read()
+            ext = (img_file.filename or "image.png").rsplit(".", 1)[-1].lower()
+            path = os.path.join("output", f"model{idx}.{ext}")
+            with open(path, "wb") as f:
+                f.write(img_bytes)
+            print(f"✅ Saved model image: {path}")
+
+    # Run the heavy pipeline in a thread so the event loop is not blocked
+    def _run_pipeline():
+        # Step 1 – Extract model/clothing images (only if no model images were uploaded)
+        existing_models = [f for f in os.listdir("output") if f.startswith("model") and f.endswith((".png", ".jpg", ".jpeg"))]
+        if not existing_models:
+            run_extract_images(scenes, json.dumps(script_data))
+        else:
+            print(f"⏭️  Using {len(existing_models)} uploaded model image(s), skipping extraction.")
+
+        # Step 2 – Generate one scene image per scene
+        run_scene_generation(scenes)
+
+        # Step 3 – Generate Kling video clips per scene
+        video_paths = run_kling_video(scenes)
+
+        if not video_paths:
+            raise RuntimeError("No video clips were generated. Check scene images and Kling API key.")
+
+        # Step 4 – Merge all clips
+        final_path = merge_videos(video_paths)
+        return final_path
+
+    try:
+        final_video_path = await asyncio.to_thread(_run_pipeline)
+    except Exception as e:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return FileResponse(
+        path=final_video_path,
+        media_type="video/mp4",
+        filename="advertisement_video.mp4",
+    )
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, port=8000)
-
 
 

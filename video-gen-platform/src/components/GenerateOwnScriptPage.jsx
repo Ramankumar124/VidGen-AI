@@ -4,8 +4,9 @@ import ScriptSelectionSection from "./ScriptSelectionSection";
 import ProductDetailsForScriptSection from "./ProductDetailsForScriptSection";
 import ProductImagesSection from "./ProductImagesSection";
 import ScriptResultDisplay from "./ScriptResultDisplay";
+import ProcessingModal from "./ProcessingModal";
 import Toast from "./Toast";
-import { streamVideos, generateOwnScript } from "../api";
+import { streamVideos, generateOwnScript, generateVideo } from "../api";
 import "./GenerateOwnScriptPage.css";
 
 function useToast() {
@@ -58,6 +59,11 @@ export default function GenerateOwnScriptPage() {
   const [generatedScript, setGeneratedScript] = useState([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [showResult, setShowResult] = useState(false);
+  const [scriptForVideoIndex, setScriptForVideoIndex] = useState(0);
+  const [isVideoGenerating, setIsVideoGenerating] = useState(false);
+  const [videoProgress, setVideoProgress] = useState(0);
+  const [videoStep, setVideoStep] = useState(0);
+  const videoAbortRef = useRef(null);
 
   const { toast, showToast } = useToast();
 
@@ -164,6 +170,7 @@ export default function GenerateOwnScriptPage() {
         setGeneratedScript((prev) => [...prev, chunk]);
       });
 
+      setScriptForVideoIndex(0);
       setShowResult(true);
       showToast(
         "🎬 Custom advertisement scripts generated successfully!",
@@ -174,6 +181,83 @@ export default function GenerateOwnScriptPage() {
       showToast(`❌ Generation failed: ${err.message}`, "error", 6000);
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const getSelectedGeneratedScript = () => {
+    if (!Array.isArray(generatedScript) || generatedScript.length === 0) return null;
+    return generatedScript[scriptForVideoIndex]?.generated_script ?? null;
+  };
+
+  const handleVideoStatus = (status) => {
+    const normalized = String(status || "").toLowerCase();
+    if (normalized.includes("uploading")) {
+      setVideoStep(0);
+      setVideoProgress((prev) => Math.max(prev, 10));
+      return;
+    }
+    if (normalized.includes("running pipeline")) {
+      setVideoStep(2);
+      setVideoProgress((prev) => Math.max(prev, 45));
+      return;
+    }
+    if (normalized.includes("downloading")) {
+      setVideoStep(4);
+      setVideoProgress((prev) => Math.max(prev, 90));
+      return;
+    }
+    if (normalized.includes("done")) {
+      setVideoStep(4);
+      setVideoProgress(100);
+    }
+  };
+
+  const handleGenerateVideo = async () => {
+    const scriptData = getSelectedGeneratedScript();
+    if (!scriptData) {
+      showToast("⚠️ Generate a script first before creating video.", "error");
+      return;
+    }
+
+    const productFiles = productImages
+      .map((image) => image?.file)
+      .filter(Boolean);
+
+    const abortController = new AbortController();
+    videoAbortRef.current = abortController;
+    setIsVideoGenerating(true);
+    setVideoProgress(5);
+    setVideoStep(0);
+
+    try {
+      await generateVideo(
+        scriptData,
+        productFiles,
+        [],
+        handleVideoStatus,
+        { signal: abortController.signal },
+      );
+      setVideoProgress(100);
+      showToast(
+        "✅ Video generated successfully! Download started.",
+        "success",
+        5000,
+      );
+    } catch (err) {
+      if (err?.name === "AbortError") {
+        showToast("⏹️ Video generation cancelled.", "error");
+      } else {
+        showToast(`❌ Video generation failed: ${err.message}`, "error", 7000);
+      }
+    } finally {
+      videoAbortRef.current = null;
+      setIsVideoGenerating(false);
+    }
+  };
+
+  const handleCancelVideoGeneration = () => {
+    if (videoAbortRef.current) {
+      videoAbortRef.current.abort();
     }
   };
 
@@ -199,6 +283,14 @@ export default function GenerateOwnScriptPage() {
     setGeneratedScript([]);
     setShowResult(false);
     setAnalysisComplete(false);
+    setScriptForVideoIndex(0);
+    setIsVideoGenerating(false);
+    setVideoProgress(0);
+    setVideoStep(0);
+    if (videoAbortRef.current) {
+      videoAbortRef.current.abort();
+      videoAbortRef.current = null;
+    }
   };
 
   return (
@@ -503,7 +595,74 @@ export default function GenerateOwnScriptPage() {
 
               <ScriptResultDisplay data={generatedScript} />
 
+              {Array.isArray(generatedScript) && generatedScript.length > 1 && (
+                <div style={{ marginTop: "16px" }}>
+                  <label
+                    className="form-label"
+                    htmlFor="video-script-select"
+                    style={{ display: "block", marginBottom: "8px" }}
+                  >
+                    Script to use for video generation
+                  </label>
+                  <select
+                    id="video-script-select"
+                    className="form-input form-select"
+                    value={scriptForVideoIndex}
+                    onChange={(e) =>
+                      setScriptForVideoIndex(Number(e.target.value))
+                    }
+                  >
+                    {generatedScript.map((_, idx) => (
+                      <option key={idx} value={idx}>
+                        Script {idx + 1}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div className="result-actions">
+                <button
+                  type="button"
+                  className="btn-submit"
+                  onClick={handleGenerateVideo}
+                  disabled={isVideoGenerating}
+                  style={{ width: "auto" }}
+                >
+                  <span className="btn-submit-inner">
+                    {isVideoGenerating ? (
+                      <>
+                        <svg
+                          className="animate-spin"
+                          width="18"
+                          height="18"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.5"
+                        >
+                          <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                        </svg>
+                        Generating Video...
+                      </>
+                    ) : (
+                      <>
+                        <svg
+                          width="18"
+                          height="18"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        >
+                          <polygon points="23 7 16 12 23 17 23 7" />
+                          <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+                        </svg>
+                        Generate Video
+                      </>
+                    )}
+                  </span>
+                </button>
                 <button
                   type="button"
                   className="btn-ghost"
@@ -572,6 +731,12 @@ export default function GenerateOwnScriptPage() {
         message={toast.message}
         type={toast.type}
         visible={toast.visible}
+      />
+      <ProcessingModal
+        visible={isVideoGenerating}
+        progress={videoProgress}
+        currentStep={videoStep}
+        onCancel={handleCancelVideoGeneration}
       />
     </>
   );

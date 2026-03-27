@@ -1,12 +1,22 @@
 # Pydantic Models for Structured Output
 from pydantic import BaseModel, Field
+from pydantic import field_validator
 from typing import List, Optional
 
 
 class SceneDetail(BaseModel):
     scene: int = Field(..., description="Scene number")
     timestamp: str = Field(..., description="Timestamp in MM:SS-MM:SS format. Each scene must be exactly 8 seconds long (e.g. 00:00-00:08, 00:08-00:16, 00:16-00:24, ...)")
-    duration_seconds: int = Field(8, description="Duration of this scene in seconds. Must always be 8.")
+    duration_seconds: int = Field(
+        8,
+        ge=3,
+        le=15,
+        description=(
+            "Duration of this scene in seconds. "
+            "Must be between 3 and 15 (Kling video generation constraint). "
+            "Default is 8. Use 8 for most scenes unless a shorter or longer clip is appropriate."
+        )
+    )
     cuts: Optional[List[str]] = Field(None, description="Optional list of sub-cut descriptions within this 8-second scene. Use this when the scene contains multiple quick cuts or transitions.")
     visual: str = Field(..., description="Detailed visual description of the scene", min_length=100)
     voiceover: Optional[str] = Field(None, description="Voiceover or dialogue")
