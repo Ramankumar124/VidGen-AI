@@ -86,11 +86,12 @@ def run_kling_video(
         visual     = scene.get("visual", "")
         voiceover  = scene.get("voiceover", "") or ""
         editing    = scene.get("editing", "") or ""
+        camera_movement = scene.get("camera_movement", "") or ""
         cuts       = scene.get("cuts", "") or ""
         duration   = _clamp_duration(scene.get("duration_seconds", 8))
 
         video_path = os.path.join(VIDEOS_OUTPUT_DIR, f"scene_{scene_num:02d}.mp4")
-
+         
         # Skip if already generated
         if os.path.exists(video_path):
             print(f"⏭️  Scene {scene_num}: already exists, skipping.")
@@ -111,6 +112,10 @@ def run_kling_video(
         prompt_parts = [f"Scene {scene_num} [{timestamp}]:", f"Visual: {visual}"]
         if voiceover:
             prompt_parts.append(f"Voiceover: {voiceover}")
+        if camera_movement:
+            prompt_parts.append(
+                f"Camera / motion (primary — animate the clip to match this camera work): {camera_movement}"
+            )
         if editing:
             prompt_parts.append(f"Editing direction: {editing}")
         if cuts:
@@ -122,6 +127,12 @@ def run_kling_video(
 
         # Upload image and generate
         print(f"   ⬆️  Uploading image to fal…")
+
+
+        def on_queue_update(update):
+           if isinstance(update, fal_client.InProgress):
+               for log in update.logs:
+                print(log["message"])
         try:
             image_url = fal_client.upload_file(image_path)
         except Exception as e:
@@ -140,8 +151,10 @@ def run_kling_video(
         print(f"   ⏳ Requesting Kling generation (duration={duration}s)…")
         try:
             result = fal_client.subscribe(
-                "fal-ai/kling-video/v3/pro/image-to-video",
+                "fal-ai/sora-2/image-to-video",
+                with_logs=True,
                 arguments=args,
+                on_queue_update=on_queue_update,
             )
         except Exception as e:
             print(f"   ❌ Kling generation failed for scene {scene_num}: {e}")

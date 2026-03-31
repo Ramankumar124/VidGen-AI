@@ -17,6 +17,7 @@ script =[
       "voiceover": "Some moments simply sparkle, effortlessly capturing the light within you.",
       "dialogue": "",
       "editing": "Slow, graceful zoom in on the model's face, focusing on the earrings as they gently sway.",
+      "camera_movement": "Extreme close-up, shallow depth of field with soft bokeh background; slow push-in toward the earring as it catches light, rack-focus from face to jewel.",
       "text_overlay": "",
       "model_clothes": [
         "White, delicate, strapless top, suggesting a sundress or elegant casual wear."
@@ -41,6 +42,7 @@ script =[
       "voiceover": "But true brilliance isn't found, it's meticulously crafted.",
       "dialogue": "",
       "editing": "Fast, precise cuts between raw materials, creating a dynamic introduction to the craftsmanship.",
+      "camera_movement": "Macro lens, static tripod; each cut frames a different gemstone dead-centre with extreme close-up and very shallow depth of field. No camera motion within each sub-cut — let the subject fill the frame.",
       "text_overlay": "2 DAYS AGO",
       "model_clothes": [],
       "model_appearance": []
@@ -54,6 +56,7 @@ script =[
       "voiceover": "Each rose, each gem, a testament to artistry and patience.",
       "dialogue": "",
       "editing": "Smooth, focused cuts, almost like a time-lapse, highlighting the detailed setting work and the artisan's skill.",
+      "camera_movement": "Close-up, tilted top-down overhead angle on the hands; static tripod with very shallow depth of field isolating the tool tip and jewel. Gentle slow-push-in to highlight the moment the gem seats into the bezel.",
       "text_overlay": "",
       "model_clothes": [],
       "model_appearance": []
@@ -72,6 +75,7 @@ script =[
       "voiceover": "From individual elements, a masterpiece takes form, designed to grace your every move.",
       "dialogue": "",
       "editing": "Seamless transitions between micro-details, emphasizing the complex assembly process and skilled labor.",
+      "camera_movement": "Macro close-up, static overhead or slight 45-degree angle; each sub-cut reframes tightly on the specific component being assembled. Final sub-cut pulls back slightly to a medium close-up revealing the whole earring on velvet.",
       "text_overlay": "",
       "model_clothes": [],
       "model_appearance": []
@@ -85,6 +89,7 @@ script =[
       "voiceover": "Perfect for sun-drenched days and effortless evenings.",
       "dialogue": "",
       "editing": "Smooth, gentle pan following the model's subtle head turn and movements, highlighting the earrings' dynamism.",
+      "camera_movement": "Medium shot, natural lens (50mm feel), slight handheld sway for warmth; gentle horizontal pan following the model's head turn left-to-right, ending on the earring catching sunlight.",
       "text_overlay": "",
       "model_clothes": [
         "Light, flowing sundress in a pastel shade, such as a soft peach or mint green, simple yet elegant cut."
@@ -103,6 +108,7 @@ script =[
       "voiceover": "Let them speak volumes about your unique style, wherever you wander.",
       "dialogue": "",
       "editing": "Steady tracking shot, following the model gracefully as she walks, emphasizing her confident movement and the earrings' elegance.",
+      "camera_movement": "Medium-wide shot, slight telephoto compression (85mm feel); smooth dolly/tracking alongside the model as she walks, keeping her at frame centre. Camera stays level; golden-hour backlight flares gently around the earrings.",
       "text_overlay": "",
       "model_clothes": [
         "Light, elegant beach cover-up or a flowy top in a vibrant summer color like coral or turquoise, paired with tailored shorts."
@@ -122,6 +128,7 @@ script =[
       "voiceover": "A touch of timeless elegance, vibrant and distinctly you.",
       "dialogue": "",
       "editing": "Slow, graceful reveal from a slightly blurred background to sharp focus on the earrings and the model's expressive face.",
+      "camera_movement": "Close-up portrait framing, short telephoto (85–100mm), very shallow depth of field; begins slightly soft/racked to background then slowly racks focus onto the earring and model's eye. Camera is static — let focus pull and ambient light do the motion work.",
       "text_overlay": "",
       "model_clothes": [
         "A sophisticated, lightweight linen dress or a silk blouse in an earthy tone, complementing the gemstone colors."
@@ -140,6 +147,7 @@ script =[
       "voiceover": "Discover your next statement piece. The Rose Gemstone Shoulder Grazers, exclusively from Ritu Kumar.",
       "dialogue": "",
       "editing": "Clean product reveal with elegant text overlay animation and a subtle glow effect on the earrings.",
+      "camera_movement": "Tight product shot, symmetric centre framing, macro/close-up; starts very close on the earrings then slowly zooms out (optical or digital pull-back) to reveal the full composition with logo and text. Static on a tripod — no shake.",
       "text_overlay": "Ritu Kumar Rose Gemstone Shoulder Grazers INR 5850 Shop Now at RituKumar.com",
       "model_clothes": [],
       "model_appearance": []
@@ -153,7 +161,7 @@ def load_images_by_prefix(prefix: str, folder: str = "output") -> list[Image.Ima
     from the given folder. Works for any count (1, 2, 3, ...).
     Returns a list of PIL Image objects sorted by filename.
     """
-    pattern = os.path.join(folder, f"{prefix}*.png")
+    pattern = os.path.join(folder, f"{prefix}*.*")
     paths = sorted(glob.glob(pattern))
     images = []
     for path in paths:

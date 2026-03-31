@@ -1,9 +1,10 @@
 """
 Extract images pipeline step.
-Analyzes a script to extract model, product, and clothing info,
+Analyzes a script to extract model, product, clothing, and background info,
 then generates reference images for each.
 """
 import os
+import re
 from io import BytesIO
 from typing import List
 
@@ -13,103 +14,30 @@ from google import genai
 from google.genai import types
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnableLambda
 from dotenv import load_dotenv
-
+ 
+from pipeline.asset_registry import build_asset_registry, save_asset_registry
+from models.extractImages import ModelInfo, ScriptAnalysisOutput,ClothingExtractionOutput,ClothingItem,BackgroundExtractionOutput,BackgroundLocation
 load_dotenv()
 
 # ── Gemini client ────────────────────────────────────────────────────────────
 _gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 # ── LLM for structured extraction ───────────────────────────────────────────
-_llm = ChatOpenAI(model="gpt-4o", temperature=0.5)
+_llm = ChatOpenAI(model="gpt-5.4-mini", temperature=0.5)
 
 
 # ── Pydantic models ──────────────────────────────────────────────────────────
-class ModelAppearance(BaseModel):
-    build: str
-    hair: str
-    makeup: str
-    outfit: str
-
-class ModelInfo(BaseModel):
-    name: str = Field(description="Identifier e.g. model1")
-    type: str = Field(description="male / female / group")
-    age_range: str
-    ethnicity_region: str
-    persona: List[str]
-    appearance: ModelAppearance
-    role: str
-
-class TargetAudience(BaseModel):
-    age_range: str
-    demographics: str
-    interests: List[str]
-
-class KeyAttributes(BaseModel):
-    visual: List[str]
-    emotional: List[str]
-    functional: List[str]
-
-class BrandMessage(BaseModel):
-    core_theme: str
-    positioning: List[str]
-
-class ProductInfo(BaseModel):
-    type: str
-    category: str
-    pricing_position: str
-    target_audience: TargetAudience
-    key_attributes: KeyAttributes
-    presentation_strategy: List[str]
-    brand_message: BrandMessage
-
-class Lighting(BaseModel):
-    type: str
-    quality: str
-    direction: str = None
-    color_temperature: str = None
-    focus: str = None
-
-class Location(BaseModel):
-    name: str
-    region: str
-    lighting: Lighting
-    visual_elements: List[str]
-    camera_style: List[str]
-    mood: str
-
-class EnvironmentInfo(BaseModel):
-    locations: List[Location]
-
-class ScriptAnalysisOutput(BaseModel):
-    models: List[ModelInfo]
-    product: ProductInfo
-    environment: EnvironmentInfo
-
-
-class ClothingItem(BaseModel):
-    name: str = Field(description="Short label e.g. 'White Linen Maxi Dress'")
-    description: str = Field(description="Detailed visual description suitable for image generation")
-    scene_numbers: List[int]
-    count: int
-
-class ClothingExtractionOutput(BaseModel):
-    repeated_clothing: List[ClothingItem] = Field(
-        description="Clothing appearing in MORE THAN ONE scene, ordered by frequency"
-    )
-
 
 # ── Image generation helpers ─────────────────────────────────────────────────
 
 def _generate_model_images(models_list: List[ModelInfo]) -> dict:
-    os.makedirs("output", exist_ok=True)
+    os.makedirs("output/models", exist_ok=True)
     results = {}
 
     for i, model in enumerate(models_list):
         md = model.model_dump()
-        key = md.get("name", f"model{i+1}")
-
+        key = f"model{i+1}"
         prompt = f"""
 Raw unedited DSLR photo, authentic passport-style portrait.
 Subject: A {md.get('type')}, age {md.get('age_range')}, {md.get('ethnicity_region')} heritage.
@@ -145,7 +73,7 @@ Composition:
         file_path = None
         for part in response.candidates[0].content.parts:
             if part.inline_data is not None:
-                file_path = os.path.join("output", f"{key}.png")
+                file_path = os.path.join("output/models", f"{key}.png")
                 Image.open(BytesIO(part.inline_data.data)).save(file_path)
                 print(f"   ✅ Model image saved: {file_path}")
                 break
@@ -223,6 +151,99 @@ Full garment, no model face visible.
     return results
 
 
+def _extract_unique_backgrounds(script_scenes: list) -> BackgroundExtractionOutput:
+    """
+    Use LLM to group scene_background_location values into unique background plates.
+    Reads the 'scene_background_location' field from each raw scene dict.
+    Also enriches descriptions using 'location' field if present.
+    """
+    scene_bg_summary = []
+    for scene in script_scenes:
+        scene_num = scene.get("scene", "?")
+        # Accept both field names used across different script formats
+        bg = (
+            scene.get("scene_background_location")
+            or scene.get("location")
+            or ""
+        )
+        if bg.strip():
+            scene_bg_summary.append(f"Scene {scene_num}: {bg}")
+
+    if not scene_bg_summary:
+        return BackgroundExtractionOutput(backgrounds=[])
+
+    bg_text = "\n".join(scene_bg_summary)
+
+    bg_prompt = ChatPromptTemplate.from_template("""
+You are a film location scout. Group the following scene background descriptions into unique distinct locations.
+Scenes that share the same physical environment (even if described slightly differently) should be grouped together.
+
+Scene Background Data:
+{bg_text}
+
+For each unique background location provide:
+- A short safe key (lowercase, underscores only, suitable as a filename, e.g. 'beach_golden_hour')
+- A detailed visual description suitable for generating a wide cinematic background plate image
+  (no people, no models, just the environment: lighting, atmosphere, textures, perspective)
+- Which scene numbers use this background (MUST be exact scene numbers from the data above)
+
+Return ALL unique background locations found. Every scene number must appear in exactly one background.
+""")
+    structured_llm = _llm.with_structured_output(BackgroundExtractionOutput)
+    chain = bg_prompt | structured_llm
+    return chain.invoke({"bg_text": bg_text})
+
+
+def _generate_background_images(backgrounds: List[BackgroundLocation]) -> dict:
+    """
+    Generate a wide cinematic background plate image for each unique location.
+    Returns: { key: file_path }
+    """
+    os.makedirs("output/backgrounds", exist_ok=True)
+    results = {}
+
+    for i, bg in enumerate(backgrounds):
+        # Sanitize the key for use as a filename
+        safe_key = re.sub(r"[^a-z0-9_]", "_", bg.key.lower())[:60]
+        file_name = f"bg_{i+1:02d}_{safe_key}.png"
+        file_path = os.path.join("output", "backgrounds", file_name)
+
+        image_prompt = f"""
+Wide-angle cinematic background environment photograph. NO people, NO models, NO faces.
+Location: {bg.description}
+
+Photography requirements:
+- Ultra-wide cinematic aspect ratio feel (16:9 composition framing)
+- Photorealistic, high dynamic range
+- Professional location photography / cinematic still
+- Rich atmospheric depth, strong sense of place
+- Beautiful natural or studio lighting as described
+- No text, no watermarks, no borders
+- Empty environment ready for models to be composited in
+"""
+        response = _gemini_client.models.generate_content(
+            model="gemini-3-pro-image-preview",
+            contents=image_prompt,
+            config=types.GenerateContentConfig(response_modalities=["IMAGE"]),
+        )
+
+        saved_path = None
+        for part in response.candidates[0].content.parts:
+            if part.inline_data is not None:
+                Image.open(BytesIO(part.inline_data.data)).save(file_path)
+                print(f"   ✅ Background image saved: {file_path}  (scenes: {bg.scene_numbers})")
+                saved_path = file_path
+                break
+
+        results[bg.key] = {
+            "path": saved_path,
+            "scene_numbers": bg.scene_numbers,
+            "description": bg.description,
+        }
+
+    return results
+
+
 # ── Public API ────────────────────────────────────────────────────────────────
 
 _analysis_prompt = ChatPromptTemplate.from_template("""
@@ -241,12 +262,14 @@ Identify:
 def run_extract_images(script_scenes: list, script_json_str: str) -> dict:
     """
     Analyzes the script to extract model/product/environment info,
-    then generates model portrait images and clothing reference images.
+    then generates model portrait images, clothing reference images,
+    and background environment images.
 
     Returns:
         {
-          "model_images": { "model1": "output/model1.png", ... },
-          "clothing_images": { "White Dress": "output/clothing/...", ... }
+          "model_images":      { "model1": "output/models/model1.png", ... },
+          "clothing_images":   { "White Dress": "output/clothing/...", ... },
+          "background_images": { "beach_golden_hour": { "path": ..., "scene_numbers": [...] }, ... }
         }
     """
     print("\n📋 Extracting models, product and environment from script…")
@@ -255,7 +278,7 @@ def run_extract_images(script_scenes: list, script_json_str: str) -> dict:
     chain = _analysis_prompt | structured_llm
     analysis: ScriptAnalysisOutput = chain.invoke({"script": script_json_str})
 
-    print(f"   Found {len(analysis.models)} model(s)")
+    print(f"Found {len(analysis.models)} model(s)")
 
     # Generate model portraits
     print("\n🖼  Generating model portrait images…")
@@ -269,4 +292,26 @@ def run_extract_images(script_scenes: list, script_json_str: str) -> dict:
     print("\n🎨 Generating clothing reference images…")
     clothing_images = _generate_clothing_images(clothing_analysis.repeated_clothing)
 
-    return {"model_images": model_images, "clothing_images": clothing_images}
+    # Extract unique backgrounds and generate images
+    # NOTE: We pass script_scenes (raw scene dicts) so we can read scene_background_location
+    # and correctly populate scene_numbers for each background plate.
+    print("\n🏞  Extracting unique background locations…")
+    bg_analysis = _extract_unique_backgrounds(script_scenes)
+    print(f"   Found {len(bg_analysis.backgrounds)} unique background location(s)")
+
+    print("\n🌄 Generating background environment images…")
+    background_images = _generate_background_images(bg_analysis.backgrounds)
+
+    result = {
+        "model_images": model_images,
+        "clothing_images": clothing_images,
+        "background_images": background_images,
+    }
+
+    registry = build_asset_registry(
+        "output",
+        extract_result=result,
+        clothing_items=clothing_analysis.repeated_clothing,
+    )
+    save_asset_registry(registry, "output")
+    return result

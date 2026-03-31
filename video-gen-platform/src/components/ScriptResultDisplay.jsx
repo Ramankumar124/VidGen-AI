@@ -154,8 +154,24 @@ function SceneCard({ scene }) {
           {/* Visual */}
           {scene.visual && (
             <div style={{ marginBottom: 10 }}>
-              <span style={{ fontWeight: 700, color: "var(--cyan-lt)" }}>🎥 Visual: </span>
-              <span style={{ color: "var(--text)", lineHeight: 1.7 }}>{scene.visual}</span>
+              <span style={{ fontWeight: 700, color: "var(--cyan-lt)" }}>
+                🎥 Visual:{" "}
+              </span>
+              <span style={{ color: "var(--text)", lineHeight: 1.7 }}>
+                {scene.visual}
+              </span>
+            </div>
+          )}
+
+          {/* Camera / shot (keyframe + motion for video) */}
+          {scene.camera_movement && (
+            <div style={{ marginBottom: 10 }}>
+              <span style={{ fontWeight: 700, color: "#e879f9" }}>
+                📷 Camera:{" "}
+              </span>
+              <span style={{ color: "var(--text)", lineHeight: 1.7 }}>
+                {scene.camera_movement}
+              </span>
             </div>
           )}
 
@@ -172,7 +188,9 @@ function SceneCard({ scene }) {
           {/* Dialogue */}
           {scene.dialogue && (
             <div style={{ marginBottom: 10 }}>
-              <span style={{ fontWeight: 700, color: "#f472b6" }}>💬 Dialogue: </span>
+              <span style={{ fontWeight: 700, color: "#f472b6" }}>
+                💬 Dialogue:{" "}
+              </span>
               <span style={{ color: "var(--text)", fontStyle: "italic" }}>
                 "{scene.dialogue}"
               </span>
@@ -180,18 +198,41 @@ function SceneCard({ scene }) {
           )}
 
           {/* Text Overlay */}
-          {scene.text_overlay && (
+          {scene.visual_elements && (
             <div style={{ marginBottom: 10 }}>
-              <span style={{ fontWeight: 700, color: "#fbbf24" }}>📝 Text on Screen: </span>
-              <span style={{ color: "var(--text)" }}>{scene.text_overlay}</span>
+              <span style={{ fontWeight: 700, color: "#fbbf24" }}>
+                📝 Visual Elements:
+              </span>
+
+              <ul style={{ color: "var(--text)", paddingLeft: 20 }}>
+                {scene.visual_elements.map((v, index) => (
+                  <li key={index}>
+                    {v.name} — {v.size} — {v.position}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {scene.scene_background_location && (
+            <div style={{ marginBottom: 10 }}>
+              <span style={{ fontWeight: 700, color: "#fbbf24" }}>
+                📝scene background location:{" "}
+              </span>
+              <span style={{ color: "var(--text)" }}>
+                {scene.scene_background_location}
+              </span>
             </div>
           )}
 
           {/* Editing */}
           {scene.editing && (
             <div style={{ marginBottom: 10 }}>
-              <span style={{ fontWeight: 700, color: "#34d399" }}>✂️ Editing: </span>
-              <span style={{ color: "var(--text-muted)" }}>{scene.editing}</span>
+              <span style={{ fontWeight: 700, color: "#34d399" }}>
+                ✂️ Editing:{" "}
+              </span>
+              <span style={{ color: "var(--text-muted)" }}>
+                {scene.editing}
+              </span>
             </div>
           )}
 
@@ -211,7 +252,9 @@ function SceneCard({ scene }) {
                 👗 Model Clothes
               </div>
               {scene.model_clothes.map((item, i) => (
-                <Tag key={i} color="#f472b6">{item}</Tag>
+                <Tag key={i} color="#f472b6">
+                  {item}
+                </Tag>
               ))}
             </div>
           )}
@@ -232,7 +275,9 @@ function SceneCard({ scene }) {
                 🧑 Model Appearance
               </div>
               {scene.model_appearance.map((item, i) => (
-                <Tag key={i} color="#60a5fa">{item}</Tag>
+                <Tag key={i} color="#60a5fa">
+                  {item}
+                </Tag>
               ))}
             </div>
           )}

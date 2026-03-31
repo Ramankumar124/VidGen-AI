@@ -1,0 +1,76 @@
+{
+  "models": {
+    "model1": "output/models/model1.png",
+    "model2": "output/models/model2.png",
+    "model3": "output/models/model3.png",
+    "model4": "output/models/model4.png"
+  },
+  "products": {
+    "1": "output/product1.webp",
+    "2": "output/product2.webp",
+    "3": "output/product3.webp"
+  },
+  "clothing": {
+    "Elegant Black High-Neck Sleeveless Top": {
+      "path": "output/clothing/clothing_1_elegant_black_high-neck_sleeveless_top.png",
+      "scene_numbers": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+      ]
+    },
+    "Chic Beige Blazer": {
+      "path": "output/clothing/clothing_2_chic_beige_blazer.png",
+      "scene_numbers": [
+        1,
+        9
+      ]
+    }
+  },
+  "backgrounds": {
+    "fashion_startup_office_doorway": {
+      "path": "output/backgrounds/bg_01_fashion_startup_office_doorway.png",
+      "scene_numbers": [
+        1,
+        9
+      ],
+      "description": "A vibrant, modern fashion startup office viewed through a partially open doorway, with sleek white walls, lush green indoor plants, and clothing racks filled with colorful garments in the background. The space feels warm, inviting, and highly aesthetic, with soft bright daylight and a clean contemporary startup atmosphere. Cinematic perspective from the doorway, lightly framed foreground, polished minimalist surfaces, and a premium creative-studio feel."
+    },
+    "pink_velvet_sofa_beige_wainscoting_lounge": {
+      "path": "output/backgrounds/bg_02_pink_velvet_sofa_beige_wainscoting_lounge.png",
+      "scene_numbers": [
+        2,
+        4,
+        6
+      ],
+      "description": "A chic, cozy creative lounge centered on a plush millennial-pink velvet sofa positioned against an elegant beige wainscoted wall. The room is clean, brightly lit, and highly aesthetic, with warm neutral tones, soft textures, and an inviting modern agency-lounge atmosphere. Wide cinematic framing should emphasize the sofa’s rich velvet material, the refined wall paneling, and the soft balanced lighting."
+    },
+    "modern_office_hallway_art_prints": {
+      "path": "output/backgrounds/bg_03_modern_office_hallway_art_prints.png",
+      "scene_numbers": [
+        3
+      ],
+      "description": "A stylish, well-lit office hallway with light-colored walls, modern abstract art prints, and warm wooden plank flooring. Natural sunlight pours in from large unseen windows, creating soft highlights and gentle shadows. The environment feels lively, active, polished, and premium, with a clean contemporary corporate-creative design."
+    },
+    "open_office_breakroom_city_view": {
+      "path": "output/backgrounds/bg_04_open_office_breakroom_city_view.png",
+      "scene_numbers": [
+        5
+      ],
+      "description": "An open office breakroom area with a sleek modern espresso machine, light wood architectural elements, and a large floor-to-ceiling window revealing a cityscape beyond. The space has a relaxed, creative atmosphere, with bright natural daylight, minimalist styling, and a comfortable high-end workplace feel. Cinematic composition should show the coffee area and expansive window as key visual anchors."
+    },
+    "modern_boardroom_glass_table": {
+      "path": "output/backgrounds/bg_05_modern_boardroom_glass_table.png",
+      "scene_numbers": [
+        7,
+        8
+      ],
+      "description": "A sleek modern corporate boardroom featuring a large glass table, minimalist black ergonomic chairs, crisp off-white walls, and subtle light wood trim. The lighting is soft and diffused, with a clean, professional, high-end aesthetic. Wide background plate should emphasize the symmetry of the table setup, polished surfaces, and understated executive atmosphere."
+    }
+  }
+}

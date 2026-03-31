@@ -4,6 +4,7 @@ from typing import List
 
 from pipeline.extract_images import run_extract_images
 from pipeline.scene_generation import run_scene_generation
+from pipeline.asset_registry import build_asset_registry, save_asset_registry
 from pipeline.kling_video import run_kling_video
 from pipeline.merge_video import merge_videos
 
@@ -32,6 +33,8 @@ def run_full_pipeline(scenes: List[dict], script_json_str: str) -> str:
         run_extract_images(scenes, script_json_str)
     else:
         print("⏭️  Found uploaded model images, skipping extraction.")
+        reg = build_asset_registry(OUTPUT_DIR, extract_result=None, clothing_items=None)
+        save_asset_registry(reg, OUTPUT_DIR)
 
     # Step 2: generate scene images
     print("🖼 Generating scene images...")

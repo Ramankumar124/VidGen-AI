@@ -15,6 +15,7 @@ from prompts.prompts import SYSTEM_PROMPT, SCRIPT_GENERATION_SYSTEM_PROMPT
 from utils.DownloadVideo import download_video
 from pipeline.extract_images import run_extract_images
 from pipeline.scene_generation import run_scene_generation
+from pipeline.asset_registry import build_asset_registry, save_asset_registry
 from pipeline.kling_video import run_kling_video
 from pipeline.merge_video import merge_videos
 from pipeline.run_pipeline import run_full_pipeline
@@ -55,7 +56,7 @@ def get_summary(output_vedio_path: str):
         time.sleep(2)
 
     response = client.models.generate_content(
-    model="gemini-2.5-flash",
+    model="gemini-3.1-pro-preview",
     contents=[SYSTEM_PROMPT,video_file],
     config={
         "response_mime_type": "application/json",
@@ -146,7 +147,6 @@ async def generate_our_script(
                           - Styling Type: {styling_type}
                           - Target Age Range: {target_age_range}
                           - Target Gender: {target_gender}
-                          - Target Behavior: {target_behavior}
                           - Ideal Selling Location: {ideal_selling_location}
                           - Short Reasoning: {short_reasoning}
                              """
@@ -165,22 +165,34 @@ async def generate_our_script(
 
     async def script_stream():
         for idx, example_script in enumerate(example_scripts):
-            if total == 1:
-                script_instruction = (
-                    "You have been given ONE reference script below. "
-                    "Analyze its editing style, pacing, structure, hook, and call-to-action format. "
-                    "Generate ONE advertisement script for our product following the same style.\n\n"
-                    f"Reference Script:\n{example_script}"
-                )
-            else:
-                script_instruction = (
-                    f"You have been given {total} reference scripts. "
-                    f"This is reference script #{idx + 1} of {total}. "
-                    "Analyze its editing style, pacing, structure, hook, and call-to-action format. "
-                    "Generate ONE advertisement script for our product following the style of THIS reference script only.\n\n"
-                    f"Reference Script #{idx + 1}:\n{example_script}"
-                )
+            script_instruction = (
+    "You are given ONE reference advertisement script below.\n\n"
 
+    "Your task is to deeply analyze this script and understand its core storytelling and editing patterns. "
+    "Specifically, break down and learn:\n"
+    "- The opening hook (both visual and audio elements — how it grabs attention in the first few seconds)\n"
+    "- The pacing and timing of scenes or dialogues\n"
+    "- The overall structure (hook → problem → solution → benefits → call-to-action)\n"
+    "- The tone, language style, and emotional appeal\n"
+    "- The call-to-action format and how it drives user engagement\n\n"
+
+    "IMPORTANT:\n"
+    "- Pay special attention to the HOOK: identify whether it is curiosity-driven, emotional, shocking, or problem-based\n"
+    "- Analyze how visuals and audio (voiceover/dialogue/music cues) work together to create impact\n"
+    "- Observe transitions, rhythm, and flow of the script\n\n"
+
+    "Then, using these insights, generate ONE new advertisement script for OUR product that:\n"
+    "- Follows the SAME style, pacing, and structure\n"
+    "- Uses a similarly strong hook (adapted to our product)\n"
+    "- Maintains engaging storytelling and smooth flow\n"
+    "- Includes clear visual and audio cues where relevant\n"
+    "- Ends with a compelling call-to-action\n\n"
+
+    "Do NOT copy the content. Only replicate the STYLE and STRUCTURE.\n\n"
+
+    f"Reference Script:\n{example_script}"
+                                            )
+                
             full_prompt = f"""{SCRIPT_GENERATION_SYSTEM_PROMPT}
                               {product_details_text}
                               {script_instruction}"""
@@ -190,7 +202,7 @@ async def generate_our_script(
 
             # Use Gemini native structured output — no JSON parsing needed
             response = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-3.1-pro-preview",
                 contents=contents,
                 config={
                     "response_mime_type": "application/json",
@@ -199,6 +211,7 @@ async def generate_our_script(
             )
 
             generated_script: GeneratedScript = response.parsed
+            print(f"Generated script for reference #{idx + 1}:\n{generated_script}")
 
             script_response = ScriptResponse(
                 reference_script_index=idx + 1,
@@ -249,17 +262,7 @@ async def generate_video(
     product_images: Optional[List[UploadFile]] = File(None),
     model_images: Optional[List[UploadFile]] = File(None),
 ):
-    """
-    Full pipeline: script → extract images → scene images → Kling videos → merge → download.
-
-    Accepts:
-        script_json   : JSON string matching GeneratedScript schema
-        product_images: upload product reference images (saved as output/product1.png …)
-        model_images  : upload model reference photos  (saved as output/model1.png …)
-
-    Returns:
-        The final merged MP4 as a file download.
-    """
+    print("product_images:", [img.filename for img in product_images] if product_images else "None")
     # Parse script
     try:
         script_data = json.loads(script_json)
@@ -272,16 +275,18 @@ async def generate_video(
 
     # Save uploaded reference images to output/
     os.makedirs("output", exist_ok=True)
-
+     
+    #  Save Product images
     if product_images:
         for idx, img_file in enumerate(product_images, start=1):
             img_bytes = await img_file.read()
-            ext = (img_file.filename or "image.png").rsplit(".", 1)[-1].lower()
+            ext = (img_file.filename).rsplit(".", 1)[-1].lower()
+            print(f"Processing product image: {img_file.filename}, detected extension: {ext}")
             path = os.path.join("output", f"product{idx}.{ext}")
             with open(path, "wb") as f:
                 f.write(img_bytes)
             print(f"✅ Saved product image: {path}")
-
+    #  save model images
     if model_images:
         for idx, img_file in enumerate(model_images, start=1):
             img_bytes = await img_file.read()
@@ -294,11 +299,13 @@ async def generate_video(
     # Run the heavy pipeline in a thread so the event loop is not blocked
     def _run_pipeline():
         # Step 1 – Extract model/clothing images (only if no model images were uploaded)
-        existing_models = [f for f in os.listdir("output") if f.startswith("model") and f.endswith((".png", ".jpg", ".jpeg"))]
+        existing_models = [f for f in os.listdir("output") if f.startswith("model") and f.endswith((".png", ".jpg", ".jpeg",".webp"))]
         if not existing_models:
             run_extract_images(scenes, json.dumps(script_data))
         else:
             print(f"⏭️  Using {len(existing_models)} uploaded model image(s), skipping extraction.")
+            reg = build_asset_registry("output", extract_result=None, clothing_items=None)
+            save_asset_registry(reg, "output")
 
         # Step 2 – Generate one scene image per scene
         run_scene_generation(scenes)
