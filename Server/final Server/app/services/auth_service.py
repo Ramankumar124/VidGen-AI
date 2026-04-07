@@ -13,9 +13,9 @@ def register_user(user:UserRegister,db:Session):
         raise HTTPException(status_code=401, detail="User Already Exsist with this email")
      
      new_user=User(
-        name:user.name,
+      #   name:user.name,
         email=user.email,
-        password:hash_password(user.password)
+      #   password:hash_password(user.password)
     )    
 
 
