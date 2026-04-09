@@ -13,6 +13,8 @@ from app.agent.prompts import SYSTEM_PROMPT
 from dotenv import load_dotenv
 from app.schemas.VedioAnalysis import VideoAnalysis
 import time
+from langgraph.types import Command
+
 load_dotenv()
 
 # Load API key from environment variable
@@ -24,7 +26,7 @@ client = genai.Client(api_key=api_key)
 
 
 
-class  AgentState(TypedDict):
+class  AgentState(TypedDict,total=False):
     url:str
     vedio_downloaded_path: str
     analized_summary: VideoAnalysis
@@ -50,7 +52,6 @@ def download_video(state:AgentState):
         error_msg = e.stderr if e.stderr else str(e)
         raise Exception(f"Failed to download video: {error_msg}")
 
-    print('my veido id',file_id)
     return {'vedio_downloaded_path':f"downloads/{file_id}.mp4"}
 
 def get_summary(state:AgentState):
@@ -86,11 +87,11 @@ def get_summary(state:AgentState):
     except Exception as e:
         print("Delete failed:", e)
      
-    print('final response',response.text)
     # Store the model output back into graph state under a stable key
     return {"analized_summary": response.text}
 
 def generate_script_human_approval(state:AgentState):
+    
     decision=interrupt(
         {
             "message":"Do u want to  skip or  generate script?",
@@ -129,20 +130,23 @@ builder.add_conditional_edges(
 builder.add_edge('generate_script_node', END)
 checkpointer = MemorySaver()
 app = builder.compile(checkpointer=checkpointer)
-def agent_run(url:str,db:Session, thread_id: str):
-  config = {"configurable": {"thread_id": thread_id}}
 
-  initial_input={
-      "url":url
-  }
-  result=app.invoke(initial_input,config=config)
+def agent_run(url: str, thread_id: str):
+    config = {"configurable": {"thread_id": thread_id}}
 
-  return result
+    initial_input = {"url": url}
+
+    for event in app.stream(initial_input, config=config):
+        print(event)
+
+        if "__interrupt__" in event:
+            return event   # STOP here
 
 
-def agent_resume(run_id:str):
-    result=    app.invoke(
-    {"__interrupt__": "generate"},
-    config={"configurable": {"thread_id": run_id}}
-)
-    return result
+
+def agent_resume(run_id: str, decision: str):
+    return app.invoke(
+        Command(resume=decision),
+        config={"configurable": {"thread_id": run_id}}
+    )
+    

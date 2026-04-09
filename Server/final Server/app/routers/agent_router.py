@@ -10,8 +10,13 @@ router=APIRouter(prefix="/agent",tags=["agent"])
 @router.post("/run")
 def run_agent(url:str,db:Session=Depends(get_db)):
     run_id = str(uuid.uuid4())
-    return agent_run(url,db,run_id)
+    event = agent_run(url, run_id)
+
+    return {
+        "thread_id": run_id,   # ✅ send to frontend
+        "interrupt": event.get("__interrupt__") if event else None
+    }
 
 @router.post("/resume")
-def resume_agent(run_id:str):
-    return agent_resume(run_id)
+def resume_agent(run_id:str,decision:str):
+    return agent_resume(run_id,decision)
