@@ -14,9 +14,10 @@ from dotenv import load_dotenv
 from app.schemas.VedioAnalysis import VideoAnalysis
 import time
 from langgraph.types import Command
-
+import sqlite3
+from langgraph.checkpoint.sqlite import SqliteSaver
 load_dotenv()
-
+conn = sqlite3.connect(database='agent.db', check_same_thread=False)
 # Load API key from environment variable
 api_key = os.getenv("GEMINI_API_KEY")
 if not api_key:
@@ -109,6 +110,9 @@ def route_after_human(state: AgentState):
 def generate_script_node(state: AgentState):
     print("Generating script... (placeholder)")
     return {}
+
+
+    
 builder=StateGraph(AgentState)
 
 builder.add_node('Download_Video',download_video)
@@ -118,6 +122,8 @@ builder.add_node('generate_script_node', generate_script_node)
 builder.add_edge(START,'Download_Video')
 builder.add_edge('Download_Video','Summarize_vedio')
 builder.add_edge('Summarize_vedio','generate_script_human_approval')
+builder.add_edge('generate_script_node', END)
+
 builder.add_conditional_edges(
     'generate_script_human_approval',
     route_after_human,
@@ -127,8 +133,8 @@ builder.add_conditional_edges(
     }
 )
 
-builder.add_edge('generate_script_node', END)
-checkpointer = MemorySaver()
+
+checkpointer = SqliteSaver(conn=conn)
 app = builder.compile(checkpointer=checkpointer)
 
 def agent_run(url: str, thread_id: str):
