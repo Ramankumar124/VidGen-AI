@@ -11,5 +11,4 @@ class AnalisedVideo(Base):
     url:Mapped[str]=mapped_column(String)
     analysis: Mapped[dict] = mapped_column(JSONB)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
-     # 👇 Each video belongs to one user
-    user: Mapped["User"] = relationship(back_populates="videos")
+    user: Mapped["User"] = relationship("User", back_populates="videos")
