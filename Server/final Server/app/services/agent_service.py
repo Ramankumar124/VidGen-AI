@@ -4,10 +4,11 @@ from sqlalchemy.orm import Session
 
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import START,END,StateGraph
-from typing import TypedDict
+from typing import Any, TypedDict
 import subprocess
 import uuid
 import os
+import json
 from google import genai
 from app.agent.prompts import SYSTEM_PROMPT
 from dotenv import load_dotenv
@@ -35,13 +36,15 @@ class  AgentState(TypedDict,total=False):
     vedio_downloaded_path: str
     analized_summary: VideoAnalysis
     generate_script_human_decision: str
-    chosen_cloth_human_decision:str
+    product_details_source_decision: str
+    product_details: dict[str, Any]
 
 @dataclass
 class ContextSchema:
     db: Session
 
-def download_video(state:AgentState):
+def download_video_from_url(state:AgentState):
+    # Node 1: Download the source video from the provided URL.
     os.makedirs("downloads", exist_ok=True)
     video_url=state["url"]
     file_id = str(uuid.uuid4())
@@ -61,7 +64,8 @@ def download_video(state:AgentState):
 
     return {'vedio_downloaded_path':f"downloads/{file_id}.mp4"}
 
-def get_summary(state:AgentState, runtime: Runtime[ContextSchema]):
+def analyze_video_and_store_summary(state:AgentState, runtime: Runtime[ContextSchema]):
+    # Node 2: Upload video to Gemini, generate analysis JSON, and persist it.
     db=runtime.context.db
     output_vedio_path=state["vedio_downloaded_path"]
 
@@ -96,21 +100,30 @@ def get_summary(state:AgentState, runtime: Runtime[ContextSchema]):
      
 
      #store the analysis data in database
+    parsed_analysis: dict[str, Any]
+    try:
+       parsed_analysis = json.loads(response.text)
+    except Exception:
+       parsed_analysis = {"raw_response": response.text}
+
     try:
        new_analysis=AnalisedVideo(
         url=state["url"],
-        analysis=response.text
+        analysis=parsed_analysis
       )
        db.add(new_analysis)
        db.commit()
+       db.refresh(new_analysis)
     except Exception as e:
         print("DB Insert failed:", e)
+        new_analysis = None
 
      
-    # Store the model output back into graph state under a stable key
+    # Store summary + DB record id for downstream product-details persistence.
     return {"analized_summary": response.text}
 
-def generate_script_human_approval(state:AgentState):
+def ask_user_if_script_generation_is_needed(state:AgentState):
+    # Node 3: Pause flow and ask whether to skip or continue to script generation.
     
     decision=interrupt(
         {
@@ -120,73 +133,93 @@ def generate_script_human_approval(state:AgentState):
     )
     return {"generate_script_human_decision": decision}
 
-def route_after_human(state: AgentState):
+def route_after_choosing_script_generation(state: AgentState):
     if state["generate_script_human_decision"] == "skip":
         return END
     else:
-        return "generate_script_node"
+        return "collect_product_details_source_decision"
 
-def generate_script_node(state: AgentState):
+def collect_product_details_source_decision(state: AgentState):
+    # Node 4: Ask user whether product details are new or selected from existing.
 
     decision=interrupt(
         {
-            "message":"Choose product cloth",
+            "message":"How do you want to provide product details?",
             "options":["add_new", "choose_from_existing"]
         }
     )
-    print("Choosing product cloth... (placeholder)")
-    return {"chosen_cloth_human_decision": decision}
+    print("Collecting product details source decision...")
+    return {"product_details_source_decision": decision}
   
 
-def route_after_cloth_decision(state: AgentState):
-    if state["chosen_cloth_human_decision"] == "add_new":
-        print("Routing to add new cloth flow... (placeholder)")
-        return "add_new_cloth_node"
+def route_after_product_details_source_decision(state: AgentState):
+    if state["product_details_source_decision"] == "add_new":
+        print("Routing to add new product details flow...")
+        return "collect_new_product_details"
     else:
-        print("Routing to choose from existing cloth flow... (placeholder)")
-        return "choose_from_existing_cloth_node"
+        print("Routing to choose existing product flow...")
+        return "collect_existing_product_details"
 
-def add_new_cloth_node(state:AgentState):
-    print('adding new cloths')
-    return {}
+def collect_new_product_details(state:AgentState):
+    # Node 5A: Ask user for brand-new product details to store.
+    details = interrupt(
+        {
+            "message": "Provide new product details",
+            "expected_payload": {
+                "product_name": "string",
+                "brand": "string",
+                "category": "string",
+                "price": "number_or_string",
+                "description": "string"
+            }
+        }
+    )
+    print("Received new product details input.")
+    return {"product_details": {"source": "add_new", "details": details}}
 
-def choose_from_existing_cloth_node(state:AgentState):
-    print('choosing from existing')
-    return {}
+def collect_existing_product_details(state:AgentState):
+    # Node 5B: Ask user to choose an existing product reference/details.
+    selected_product = interrupt(
+        {
+            "message": "Select product from existing catalog",
+            "expected_payload": {
+                "product_id": "string_or_number",
+                "product_name": "optional_string"
+            }
+        }
+    )
+    print("Received existing product selection.")
+    return {"product_details": {"source": "choose_from_existing", "details": selected_product}}
 
-    
-    
 builder=StateGraph(AgentState,context_schema=ContextSchema)
 
-builder.add_node('Download_Video',download_video)
-builder.add_node('Summarize_vedio',get_summary)
-builder.add_node('generate_script_human_approval',generate_script_human_approval)
-builder.add_node('generate_script_node', generate_script_node)
-# builder.add_node('route_after_cloth_decision',route_after_cloth_decision)
-builder.add_node('add_new_cloth_node',add_new_cloth_node)
-builder.add_node('choose_from_existing_cloth_node',choose_from_existing_cloth_node)
-builder.add_edge(START,'Download_Video')
-builder.add_edge('Download_Video','Summarize_vedio')
-builder.add_edge('Summarize_vedio','generate_script_human_approval')
+# Build a clearly named LangGraph pipeline so each node is self-explanatory.
+builder.add_node('download_video_from_url', download_video_from_url)
+builder.add_node('analyze_video_and_store_summary', analyze_video_and_store_summary)
+builder.add_node('ask_user_if_script_generation_is_needed', ask_user_if_script_generation_is_needed)
+builder.add_node('collect_product_details_source_decision', collect_product_details_source_decision)
+builder.add_node('collect_new_product_details', collect_new_product_details)
+builder.add_node('collect_existing_product_details', collect_existing_product_details)
+builder.add_edge(START, 'download_video_from_url')
+builder.add_edge('download_video_from_url', 'analyze_video_and_store_summary')
+builder.add_edge('analyze_video_and_store_summary', 'ask_user_if_script_generation_is_needed')
 
 builder.add_conditional_edges(
-    'generate_script_human_approval',
-    route_after_human,
+    'ask_user_if_script_generation_is_needed',
+    route_after_choosing_script_generation,
     {
-        "generate_script_node": "generate_script_node",
+        "collect_product_details_source_decision": "collect_product_details_source_decision",
         END: END
     }
 )
-# builder.add_edge('generate_script_node', 'route_after_cloth_decision')
 builder.add_conditional_edges(
-    'generate_script_node',
-    route_after_cloth_decision,
+    'collect_product_details_source_decision',
+    route_after_product_details_source_decision,
     {
-        "add_new_cloth_node": "add_new_cloth_node",
-        'choose_from_existing_cloth_node':'choose_from_existing_cloth_node'
+        "collect_new_product_details": "collect_new_product_details",
+        'collect_existing_product_details':'collect_existing_product_details'
     }
 )
-
 checkpointer = SqliteSaver(conn=conn)
 app = builder.compile(checkpointer=checkpointer)
 
@@ -210,7 +243,7 @@ def agent_run(url: str, thread_id: str,db:Session):
 
 
 
-def agent_resume(run_id: str, decision: str,db:Session):
+def agent_resume(run_id: str, decision: Any,db:Session):
     config = {"configurable": {"thread_id": run_id}}
     for event in app.stream(
         Command(resume=decision),
