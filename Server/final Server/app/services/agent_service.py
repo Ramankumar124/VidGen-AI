@@ -174,6 +174,8 @@ def collect_new_product_details(state:AgentState):
             }
         }
     )
+
+    print('details',details)
     print("Received new product details input.")
     return {"product_details": {"source": "add_new", "details": details}}
 
@@ -200,6 +202,7 @@ builder.add_node('ask_user_if_script_generation_is_needed', ask_user_if_script_g
 builder.add_node('collect_product_details_source_decision', collect_product_details_source_decision)
 builder.add_node('collect_new_product_details', collect_new_product_details)
 builder.add_node('collect_existing_product_details', collect_existing_product_details)
+
 builder.add_edge(START, 'download_video_from_url')
 builder.add_edge('download_video_from_url', 'analyze_video_and_store_summary')
 builder.add_edge('analyze_video_and_store_summary', 'ask_user_if_script_generation_is_needed')
@@ -225,43 +228,48 @@ app = builder.compile(checkpointer=checkpointer)
 
 def agent_run(url: str, thread_id: str,db:Session):
     config = {"configurable": {"thread_id": thread_id}}
-
     initial_input = {"url": url}
-
+    state = app.get_state(config=config)
     for event in app.stream(initial_input, config=config,context={"db":db}):
-        print(event)
 
         if "__interrupt__" in event:
                 return {
                 "status": "waiting",
-                "interrupt": event["__interrupt__"]
+                "interrupt": event["__interrupt__"],
+                "data": state.values   # 🔥 return partial state
             }
+        
+       
     return {
         "status": "completed",
-        "interrupt": None
+        "interrupt": None,
+        "data": state.values 
     }
 
 
 
 def agent_resume(run_id: str, decision: Any,db:Session):
     config = {"configurable": {"thread_id": run_id}}
+    state = app.get_state(config=config)
+
     for event in app.stream(
         Command(resume=decision),
         config=config,
         context={"db": db}
     ):
-        print("EVENT:", event)
-
         # If next interrupt comes → stop and return
         if "__interrupt__" in event:
             return {
                 "status": "waiting",
-                "interrupt": event["__interrupt__"]
+                "interrupt": event["__interrupt__"],
+                "data":state.values
             }
-
+    state = app.get_state(config=config)
+    print('steate',state)
     # If no interrupt → flow completed
     return {
         "status": "completed",
-        "interrupt": None
+        "interrupt": None,
+        "data":state.values
     }
     
