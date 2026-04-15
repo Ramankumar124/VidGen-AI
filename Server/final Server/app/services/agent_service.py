@@ -20,6 +20,7 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from dataclasses import dataclass
 from langgraph.runtime import Runtime
 from app.models.videoAnalisis import AnalisedVideo
+from app.models.product import Product
 load_dotenv()
 conn = sqlite3.connect(database='agent.db', check_same_thread=False)
 # Load API key from environment variable
@@ -160,7 +161,8 @@ def route_after_product_details_source_decision(state: AgentState):
         print("Routing to choose existing product flow...")
         return "collect_existing_product_details"
 
-def collect_new_product_details(state:AgentState):
+def collect_new_product_details(state:AgentState,runtime: Runtime[ContextSchema]):
+    db=runtime.context.db
     # Node 5A: Ask user for brand-new product details to store.
     details = interrupt(
         {
@@ -170,12 +172,25 @@ def collect_new_product_details(state:AgentState):
                 "brand": "string",
                 "category": "string",
                 "price": "number_or_string",
-                "description": "string"
+                "description": "string",
+                 "productImages": ["string (image_url or file_path)"]
             }
         }
     )
 
-    print('details',details)
+
+    new_product=Product(
+        product_name=details.product_name,
+        brand=details.brand,
+        category=details.category,
+        price=details.price,
+        description=details.description,
+        product_images=details.productImages
+    )
+    db.add(new_product)
+    db.commit()
+    db.refresh(new_product)
+    product_id = new_product.id
     print("Received new product details input.")
     return {"product_details": {"source": "add_new", "details": details}}
 
