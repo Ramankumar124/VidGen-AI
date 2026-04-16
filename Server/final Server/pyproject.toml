@@ -19,6 +19,7 @@ dependencies = [
     "pyjwt>=2.12.1",
     "python-jose>=3.5.0",
     "python-multipart>=0.0.22",
+    "secretstorage>=3.5.0",
     "sqlalchemy>=2.0.48",
     "uvicorn>=0.41.0",
 ]

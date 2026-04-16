@@ -49,6 +49,8 @@ def download_video_from_url(state:AgentState):
     os.makedirs("downloads", exist_ok=True)
     video_url=state["url"]
     file_id = str(uuid.uuid4())
+    env = os.environ.copy()
+    env["PATH"] += os.pathsep + os.path.expanduser("~/.deno/bin")
 
     try:
             result = subprocess.run([
@@ -56,9 +58,18 @@ def download_video_from_url(state:AgentState):
                  "-f", "best[ext=mp4]/best",
                 # "-f", "bestvideo+bestaudio/best",
                 # "--merge-output-format", "mp4",
+                  # ✅ cookies (VERY IMPORTANT)
+                "--cookies", "cookies.txt",
+               "--remote-components", "ejs:github",
+               "--extractor-args", "youtube:player_client=web",
                 "-o", f"downloads/{file_id}.%(ext)s",
                 video_url
-            ], capture_output=True, text=True, check=True)
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+            env=env
+            )
     except subprocess.CalledProcessError as e:
         error_msg = e.stderr if e.stderr else str(e)
         raise Exception(f"Failed to download video: {error_msg}")
@@ -133,7 +144,7 @@ def ask_user_if_script_generation_is_needed(state:AgentState):
         }
     )
     return {"generate_script_human_decision": decision}
-
+                
 def route_after_choosing_script_generation(state: AgentState):
     if state["generate_script_human_decision"] == "skip":
         return END
@@ -190,9 +201,8 @@ def collect_new_product_details(state:AgentState,runtime: Runtime[ContextSchema]
     db.add(new_product)
     db.commit()
     db.refresh(new_product)
-    product_id = new_product.id
     print("Received new product details input.")
-    return {"product_details": {"source": "add_new", "details": details}}
+    return {"product_details": {"source": "add_new", "details":new_product}}
 
 def collect_existing_product_details(state:AgentState):
     # Node 5B: Ask user to choose an existing product reference/details.
@@ -210,6 +220,93 @@ def collect_existing_product_details(state:AgentState):
 
 builder=StateGraph(AgentState,context_schema=ContextSchema)
 
+def create_script_from_summary_and_product_details(state:AgentState):
+
+    product_details_text = f"""
+                          Product Details:
+                          - Brand Name: {state.}
+                          - Product Name: {product_name}
+                          - Price Range: {price_range}
+                          - Category: {category}
+                          - Product Type: {product_type}
+                          - Styling Type: {styling_type}
+                          - Target Age Range: {target_age_range}
+                          - Target Gender: {target_gender}
+                          - Ideal Selling Location: {ideal_selling_location}
+                          - Short Reasoning: {short_reasoning}
+                             """
+
+    # Read images once and build Gemini Part objects
+    image_parts = []
+    if product_images:
+        for img in product_images:
+            img_bytes = await img.read()
+            mime_type = img.content_type or "image/jpeg"
+            image_parts.append(
+                genai.types.Part.from_bytes(data=img_bytes, mime_type=mime_type)
+            )
+
+    total = len(example_scripts)
+
+    async def script_stream():
+            script_instruction = (
+    "You are given ONE reference advertisement script below.\n\n"
+
+    "Your task is to deeply analyze this script and understand its core storytelling and editing patterns. "
+    "Specifically, break down and learn:\n"
+    "- The opening hook (both visual and audio elements — how it grabs attention in the first few seconds)\n"
+    "- The pacing and timing of scenes or dialogues\n"
+    "- The overall structure (hook → problem → solution → benefits → call-to-action)\n"
+    "- The tone, language style, and emotional appeal\n"
+    "- The call-to-action format and how it drives user engagement\n\n"
+
+    "IMPORTANT:\n"
+    "- Pay special attention to the HOOK: identify whether it is curiosity-driven, emotional, shocking, or problem-based\n"
+    "- Analyze how visuals and audio (voiceover/dialogue/music cues) work together to create impact\n"
+    "- Observe transitions, rhythm, and flow of the script\n\n"
+
+    "Then, using these insights, generate ONE new advertisement script for OUR product that:\n"
+    "- Follows the SAME style, pacing, and structure\n"
+    "- Uses a similarly strong hook (adapted to our product)\n"
+    "- Maintains engaging storytelling and smooth flow\n"
+    "- Includes clear visual and audio cues where relevant\n"
+    "- Ends with a compelling call-to-action\n\n"
+
+    "Do NOT copy the content. Only replicate the STYLE and STRUCTURE.\n\n"
+
+    f"Reference Script:\n{example_script}"
+                                            )
+                
+            full_prompt = f"""{SCRIPT_GENERATION_SYSTEM_PROMPT}
+                              {product_details_text}
+                              {script_instruction}"""
+
+            # Build content parts: prompt text + any product images
+            contents = [full_prompt] + image_parts
+
+            # Use Gemini native structured output — no JSON parsing needed
+            response = client.models.generate_content(
+                model="gemini-3.1-pro-preview",
+                contents=contents,
+                config={
+                    "response_mime_type": "application/json",
+                    "response_schema": GeneratedScript,
+                },
+            )
+
+            generated_script: GeneratedScript = response.parsed
+            print(f"Generated script for reference #{idx + 1}:\n{generated_script}")
+
+            script_response = ScriptResponse(
+                reference_script_index=idx + 1,
+                total_scripts=total,
+                generated_script=generated_script,
+            )
+
+            yield script_response.model_dump_json() + "\n"
+
+    return StreamingResponse(script_stream(), media_type="application/x-ndjson")
+
 # Build a clearly named LangGraph pipeline so each node is self-explanatory.
 builder.add_node('download_video_from_url', download_video_from_url)
 builder.add_node('analyze_video_and_store_summary', analyze_video_and_store_summary)
@@ -217,6 +314,7 @@ builder.add_node('ask_user_if_script_generation_is_needed', ask_user_if_script_g
 builder.add_node('collect_product_details_source_decision', collect_product_details_source_decision)
 builder.add_node('collect_new_product_details', collect_new_product_details)
 builder.add_node('collect_existing_product_details', collect_existing_product_details)
+builder.add_node('create_script_from_summary_and_product_details', create_script_from_summary_and_product_details)  # Placeholder for script generation node
 
 builder.add_edge(START, 'download_video_from_url')
 builder.add_edge('download_video_from_url', 'analyze_video_and_store_summary')
