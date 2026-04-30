@@ -97,6 +97,7 @@ wheels = [
 ]
 
 [[package]]
+<<<<<<< HEAD
 name = "asyncpg"
 version = "0.31.0"
 source = { registry = "https://pypi.org/simple" }
@@ -137,6 +138,8 @@ wheels = [
 ]
 
 [[package]]
+=======
+>>>>>>> 846694b (starting adding electron app)
 name = "bcrypt"
 version = "5.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -504,15 +507,21 @@ dependencies = [
     { name = "google-genai" },
     { name = "langchain" },
     { name = "langgraph" },
+<<<<<<< HEAD
     { name = "langgraph-checkpoint-sqlite" },
+=======
+>>>>>>> 846694b (starting adding electron app)
     { name = "passlib", extra = ["bcrypt"] },
     { name = "psycopg2-binary" },
     { name = "pwdlib", extra = ["argon2"] },
     { name = "pydantic", extra = ["email"] },
     { name = "pyjwt" },
     { name = "python-jose" },
+<<<<<<< HEAD
     { name = "python-multipart" },
     { name = "secretstorage" },
+=======
+>>>>>>> 846694b (starting adding electron app)
     { name = "sqlalchemy" },
     { name = "uvicorn" },
 ]
@@ -525,15 +534,21 @@ requires-dist = [
     { name = "google-genai", specifier = ">=1.67.0" },
     { name = "langchain", specifier = ">=1.2.12" },
     { name = "langgraph", specifier = ">=1.1.2" },
+<<<<<<< HEAD
     { name = "langgraph-checkpoint-sqlite", specifier = ">=3.0.3" },
+=======
+>>>>>>> 846694b (starting adding electron app)
     { name = "passlib", extras = ["bcrypt"], specifier = ">=1.7.4" },
     { name = "psycopg2-binary", specifier = ">=2.9.11" },
     { name = "pwdlib", extras = ["argon2"], specifier = ">=0.3.0" },
     { name = "pydantic", extras = ["email"], specifier = ">=2.12.5" },
     { name = "pyjwt", specifier = ">=2.12.1" },
     { name = "python-jose", specifier = ">=3.5.0" },
+<<<<<<< HEAD
     { name = "python-multipart", specifier = ">=0.0.22" },
     { name = "secretstorage", specifier = ">=3.5.0" },
+=======
+>>>>>>> 846694b (starting adding electron app)
     { name = "sqlalchemy", specifier = ">=2.0.48" },
     { name = "uvicorn", specifier = ">=0.41.0" },
 ]
@@ -1789,6 +1804,7 @@ wheels = [
 ]
 
 [[package]]
+<<<<<<< HEAD
 name = "secretstorage"
 version = "3.5.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1802,6 +1818,8 @@ wheels = [
 ]
 
 [[package]]
+=======
+>>>>>>> 846694b (starting adding electron app)
 name = "server"
 version = "0.1.0"
 source = { virtual = "." }

@@ -7,12 +7,17 @@ from langgraph.graph import START,END,StateGraph
 from typing import Any, TypedDict
 from dotenv import load_dotenv
 from app.schemas.VedioAnalysis import VideoAnalysis
+<<<<<<< HEAD
 from langgraph.types import Command
 import sqlite3
 from langgraph.checkpoint.sqlite import SqliteSaver
 from dataclasses import dataclass
 from app.models.ScriptGeneration import GeneratedScript
 from app.agent.graph_node_edges import download_video_from_url, analyze_video_and_store_summary, ask_user_if_script_generation_is_needed, collect_product_details_source_decision, collect_new_product_details, collect_existing_product_details, create_script_from_summary_and_product_details, route_after_choosing_script_generation, route_after_product_details_source_decision
+=======
+import time
+from pathlib import Path
+>>>>>>> 846694b (starting adding electron app)
 load_dotenv()
 
 
@@ -44,10 +49,100 @@ builder.add_node('collect_new_product_details', collect_new_product_details)
 builder.add_node('collect_existing_product_details', collect_existing_product_details)
 builder.add_node('create_script_from_summary_and_product_details', create_script_from_summary_and_product_details)  # Placeholder for script generation node
 
+<<<<<<< HEAD
 builder.add_edge(START, 'download_video_from_url')
 builder.add_edge('download_video_from_url', 'analyze_video_and_store_summary')
 builder.add_edge('analyze_video_and_store_summary', 'ask_user_if_script_generation_is_needed')
 
+=======
+def download_video(state:AgentState):
+    BASE_DIR = Path(__file__).resolve().parent
+    DOWNLOAD_DIR = BASE_DIR / "downloads"
+
+    DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    video_url=state["url"]
+    file_id = str(uuid.uuid4())
+    output_template = str(DOWNLOAD_DIR / f"{file_id}.%(ext)s")
+
+    try:
+            result = subprocess.run([
+                "yt-dlp",
+                 "-f", "best[ext=mp4]/best",
+                "-o",output_template,
+                video_url
+            ], capture_output=True, text=True, check=True)
+    except subprocess.CalledProcessError as e:
+        error_msg = e.stderr if e.stderr else str(e)
+        raise Exception(f"Failed to download video: {error_msg}")
+
+    print('my veido id',file_id)
+    return {'vedio_downloaded_path':f"downloads/{file_id}.mp4"}
+
+def get_summary(state:AgentState):
+
+    output_vedio_path=state["vedio_downloaded_path"]
+
+    video_file = client.files.upload(file=output_vedio_path)
+
+    while True:
+        video_file = client.files.get(name=video_file.name)
+        print("File state:", video_file.state.name)
+
+        if video_file.state.name == "ACTIVE":
+            break
+
+        if video_file.state.name == "FAILED":
+            raise Exception("Video processing failed")
+
+        time.sleep(2)
+
+    response = client.models.generate_content(
+    model="gemini-2.5-flash",
+    contents=[SYSTEM_PROMPT,video_file],
+    config={
+        "response_mime_type": "application/json",
+        "response_schema": VideoAnalysis,
+    },
+     )
+    
+    try:
+        os.remove(output_vedio_path)
+        print("Deleted:", output_vedio_path)
+    except Exception as e:
+        print("Delete failed:", e)
+     
+    print('final response',response.text)
+    # Store the model output back into graph state under a stable key
+    return {"analized_summary": response.text}
+
+def generate_script_human_approval(state:AgentState):
+    decision=interrupt(
+        {
+            "message":"Do u want to  skip or  generate script?",
+            "options":["skip", "generate_script"]
+        }
+    )
+    return {"generate_script_human_decision": decision}
+
+def route_after_human(state: AgentState):
+    if state["generate_script_human_decision"] == "skip":
+        return END
+    else:
+        return "generate_script_node"
+
+def generate_script_node(state: AgentState):
+    print("Generating script... (placeholder)")
+    return {}
+builder=StateGraph(AgentState)
+
+builder.add_node('Download_Video',download_video)
+builder.add_node('Summarize_vedio',get_summary)
+builder.add_node('generate_script_human_approval',generate_script_human_approval)
+builder.add_node('generate_script_node', generate_script_node)
+builder.add_edge(START,'Download_Video')
+builder.add_edge('Download_Video','Summarize_vedio')
+builder.add_edge('Summarize_vedio','generate_script_human_approval')
+>>>>>>> 846694b (starting adding electron app)
 builder.add_conditional_edges(
     'ask_user_if_script_generation_is_needed',
     route_after_choosing_script_generation,

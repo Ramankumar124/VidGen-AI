@@ -1,0 +1,20 @@
+import { app, BrowserWindow } from "electron";
+import path from "path";
+import { isDev } from "./utils.js";
+
+app.disableHardwareAcceleration();
+
+type test = string;
+app.whenReady().then(() => {
+  const mainWindow = new BrowserWindow({
+    width: 800,
+    height: 600,
+  });
+
+  // ✅ DEV
+  if (isDev()) {
+    mainWindow.loadURL("http://localhost:5173");
+  } else {
+    mainWindow.loadFile(path.join(app.getAppPath(), "dist-react/index.html"));
+  }
+});
