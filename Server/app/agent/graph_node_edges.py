@@ -178,35 +178,51 @@ def collect_new_product_details(state:AgentState,runtime: "Runtime[ContextSchema
 
 
     new_product=Product(
-        product_name=details.product_name,
-        brand=details.brand,
-        category=details.category,
-        price=details.price,
-        description=details.description,
-        product_images=details.productImages
+        product_name=details.get("product_name", ""),
+        brand=details.get("brand", ""),
+        category=details.get("category", ""),
+        price=details.get("price", ""),
+        description=details.get("description", ""),
+        product_images=details.get("productImages", [])
     )
     db.add(new_product)
     db.commit()
     db.refresh(new_product)
     print("Received new product details input.")
-    return {"product_details": {"source": "add_new", "details":new_product}}
+    
+    product_dict = {
+        "id": new_product.id,
+        "product_name": new_product.product_name,
+        "brand": new_product.brand,
+        "category": new_product.category,
+        "price": new_product.price,
+        "description": new_product.description,
+        "product_images": new_product.product_images
+    }
+    return {"product_details": {"source": "add_new", "details": product_dict}}
 
-def collect_existing_product_details(state:AgentState):
-    # Node 5B: Ask user to choose an existing product reference/details.
+def collect_existing_product_details(state: AgentState):
+    # Node 5B: Interrupt to receive the chosen product dict from the frontend.
     selected_product = interrupt(
         {
             "message": "Select product from existing catalog",
             "expected_payload": {
                 "product_id": "string_or_number",
-                "product_name": "optional_string"
+                "product_name": "optional_string",
+                "brand": "string",
+                "category": "string",
+                "price": "string",
+                "description": "string",
+                "productImages": ["string (file_path)"]
             }
         }
     )
-    print("Received existing product selection.")
+    # selected_product is the dict the frontend sends via /agent/resume decision
+    print("Received existing product decision:", selected_product)
     return {"product_details": {"source": "choose_from_existing", "details": selected_product}}
 
 
-async def create_script_from_summary_and_product_details(state:AgentState):
+def create_script_from_summary_and_product_details(state: AgentState):
     # Extract product details from the state (handles DB model or plain dict)
     product_entry = state.get("product_details", {})
     product = None
@@ -245,12 +261,18 @@ async def create_script_from_summary_and_product_details(state:AgentState):
     product_images = _get("productImages") or []
     image_parts = []
     if product_images:
-        for img in product_images:
-            img_bytes = await img.read()
-            mime_type = img.content_type or "image/jpeg"
-            image_parts.append(
-                genai.types.Part.from_bytes(data=img_bytes, mime_type=mime_type)
-            )
+        for img_path in product_images:
+            try:
+                with open(img_path, "rb") as f:
+                    img_bytes = f.read()
+                # Determine mime type from extension
+                ext = str(img_path).lower().split('.')[-1]
+                mime_type = "image/png" if ext == "png" else "image/webp" if ext == "webp" else "image/jpeg"
+                image_parts.append(
+                    genai.types.Part.from_bytes(data=img_bytes, mime_type=mime_type)
+                )
+            except Exception as e:
+                print(f"Failed to read image {img_path}: {e}")
 
     referenceScript= state["analized_summary"]
 

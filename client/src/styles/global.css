@@ -1,0 +1,108 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  *, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-surface text-on-surface font-sans antialiased;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  #root {
+    min-height: 100vh;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-surface-lowest;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-outline-variant rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-outline;
+  }
+
+  /* Selection */
+  ::selection {
+    background-color: rgba(139, 92, 246, 0.3);
+    color: #e5e2e1;
+  }
+}
+
+@layer components {
+  /* Glassmorphic card base */
+  .glass-card {
+    @apply bg-surface-mid/70 backdrop-blur-glass border border-white/8 rounded-2xl;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+
+  /* Gradient primary button */
+  .btn-primary {
+    @apply relative overflow-hidden rounded-lg px-6 py-3 text-white font-semibold text-sm transition-all duration-300;
+    background: linear-gradient(135deg, #8b5cf6 0%, #06b6d4 100%);
+  }
+  .btn-primary:hover {
+    @apply scale-[1.02];
+    box-shadow: 0 0 30px rgba(139, 92, 246, 0.4), 0 4px 16px rgba(0, 0, 0, 0.3);
+  }
+  .btn-primary:active {
+    @apply scale-[0.98];
+  }
+  .btn-primary:disabled {
+    @apply opacity-60 cursor-not-allowed scale-100;
+  }
+
+  /* Glass input */
+  .glass-input {
+    @apply w-full bg-surface-lowest border border-outline-variant rounded-lg px-4 py-3 text-on-surface placeholder-outline text-sm transition-all duration-200 outline-none;
+  }
+  .glass-input:focus {
+    @apply border-secondary;
+    box-shadow: 0 0 0 4px rgba(6, 182, 212, 0.12);
+  }
+
+  /* AI glow orb */
+  .glow-orb {
+    @apply absolute rounded-full blur-3xl opacity-20 animate-pulse-glow pointer-events-none;
+  }
+
+  /* Label mono */
+  .label-mono {
+    @apply font-mono text-xs font-medium tracking-widest uppercase;
+  }
+}
+
+@layer utilities {
+  .border-white\/8 {
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+  .border-white\/15 {
+    border-color: rgba(255, 255, 255, 0.15);
+  }
+  .text-gradient {
+    background: linear-gradient(135deg, #d0bcff 0%, #4cd7f6 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .bg-glass {
+    background: rgba(20, 20, 20, 0.7);
+    backdrop-filter: blur(20px);
+  }
+}

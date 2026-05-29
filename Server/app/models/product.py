@@ -1,6 +1,6 @@
 from sqlalchemy import JSON, Column, ForeignKey, Integer, String
 from sqlalchemy.orm import mapped_column, Mapped
-from typing import List
+from typing import List, Optional
 from app.db.database import Base
 
 
@@ -13,3 +13,4 @@ class Product(Base):
     price: Mapped[str] = mapped_column(String)
     description: Mapped[str] = mapped_column(String)
     product_images: Mapped[List[str]] = mapped_column(JSON)
+    user_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
