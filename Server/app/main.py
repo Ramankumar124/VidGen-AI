@@ -50,3 +50,9 @@ async def custom_http_exception_handler(request: Request, exc: HTTPException):
 @app.get("/health")
 def health_check():
     return {"status": "ok", "service": "AdScript AI"}
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+ 

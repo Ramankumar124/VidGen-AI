@@ -2,3 +2,8 @@ vertexKey.json
 .env
 node_modules
 __pycache__
+dist-electron
+dist-react
+dist
+build
+*.log

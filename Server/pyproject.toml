@@ -22,4 +22,5 @@ dependencies = [
     "secretstorage>=3.5.0",
     "sqlalchemy>=2.0.48",
     "uvicorn>=0.41.0",
+    "yt-dlp>=2026.6.9",
 ]

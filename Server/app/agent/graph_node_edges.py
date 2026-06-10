@@ -8,7 +8,7 @@ from app.agent.types import AgentState, ContextSchema
 from langgraph.graph import END
 from langgraph.types import interrupt
 from typing import Any, TYPE_CHECKING
-
+import yt_dlp
 if TYPE_CHECKING:
     from langgraph.types import Runtime
 import os
@@ -22,13 +22,18 @@ from app.models.ScriptGeneration import GeneratedScript
 from app.models.videoAnalisis import AnalisedVideo
 from app.schemas.VedioAnalysis import VideoAnalysis
 from app.models.product import Product
+import sys
 load_dotenv()
 
-api_key = os.getenv("GEMINI_API_KEY")
+api_key = os.getenv("GEMINI_API_KEY", "AIzaSyBIucKtora1ZiWfT7pwMVCiCQInPC70hgM")
 if not api_key:
     raise ValueError("GEMINI_API_KEY environment variable not set")
 client = genai.Client(api_key=api_key)
 
+
+BASE_DIR = os.path.dirname(sys.executable)
+
+COOKIE_PATH = os.path.join(BASE_DIR, "cookies.txt")
 def download_video_from_url(state:AgentState):
     # Node 1: Download the source video from the provided URL.
     os.makedirs("downloads", exist_ok=True)
@@ -38,23 +43,18 @@ def download_video_from_url(state:AgentState):
     env["PATH"] += os.pathsep + os.path.expanduser("~/.deno/bin")
 
     try:
-            result = subprocess.run([
-                "yt-dlp",
-                #  "-f", "best[ext=mp4]/best",
-                "-f", "bestvideo+bestaudio/best",
-                "--merge-output-format", "mp4",
-                  # ✅ cookies (VERY IMPORTANT)
-                "--cookies", "cookies.txt",
-               "--remote-components", "ejs:github",
-               "--extractor-args", "youtube:player_client=web",
-                "-o", f"downloads/{file_id}.%(ext)s",
-                video_url
-            ],
-            capture_output=True,
-            text=True,
-            check=True,
-            env=env
-            )
+        ydl_opts = {
+             "format": "best[ext=mp4]/best",
+            "cookiefile": COOKIE_PATH,
+            "outtmpl": f"downloads/{file_id}.%(ext)s",
+            "extractor_args": {
+                "youtube": {
+                    "player_client": ["web"]
+                }
+            }
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([video_url])
     except subprocess.CalledProcessError as e:
         error_msg = e.stderr if e.stderr else str(e)
         raise Exception(f"Failed to download video: {error_msg}")
