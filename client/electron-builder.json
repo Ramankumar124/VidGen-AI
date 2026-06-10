@@ -1,0 +1,21 @@
+{
+  "appId": "com.ramankumar",
+  "files": ["dist-electron", "dist-react"],
+  "extraResources": [
+    "dist-electron/preload.cjs",
+    "src/assets/**",
+    "../Server/dist/**",
+    "../Server/.env"
+  ],
+  "icon": "./desktopIcon.png",
+  "mac": {
+    "target": "dmg"
+  },
+  "linux": {
+    "target": ["deb"],
+    "category": "Utility"
+  },
+  "win": {
+    "target": ["portable", "msi"]
+  }
+}
